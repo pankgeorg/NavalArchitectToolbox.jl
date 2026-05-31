@@ -4,3 +4,4 @@ Manifest.toml
 LocalPreferences.toml
 /docs/build/
 /runs/
+*.html

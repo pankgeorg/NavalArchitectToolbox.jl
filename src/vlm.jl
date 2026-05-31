@@ -4,13 +4,14 @@
 # rotation ω about +z. Solve ONE (key) blade; the other Z−1 blades enter
 # through rotation symmetry.
 #
-# Two details from §2.1 are essential and easy to get wrong:
-#  (1) WAKE = the propeller's *geometric*-pitch cylindrical helix — i.e. the
-#      downstream extension of the blade's own helicoidal surface. It winds
-#      the SAME sense as the rotation (+ψ as z increases), so it trails off
-#      cleanly behind the blade and never grazes the control points (a flow-
-#      aligned helix at the advance/hydrodynamic pitch winds the *opposite*
-#      way, cuts back across the lifting surface, and makes the AIC singular).
+# Key details (the first is the most error-prone):
+#  (1) WAKE = a cylindrical helix winding the SAME sense as the rotation
+#      (+ψ as z increases), so it trails off cleanly behind the blade and never
+#      grazes the control points (a flow-aligned helix at the advance pitch
+#      winds the *opposite* way, cuts back across the surface, and makes the
+#      AIC singular). The default `:transition` wake leaves the TE at the
+#      blade's geometric pitch and eases to mean(geometric, advance) downstream
+#      (Kerwin transition wake); `:geometric` keeps a constant blade pitch.
 #      Wake rings carry the adjacent TE ring's strength (Kutta, Kelvin).
 #  (2) FORCES = pressure-normal, NOT Kutta–Joukowski. Δc_p = C_LE·2·V_m·G/V∞²
 #      (steady-Bernoulli vorticity jump), and the force on each ring is
@@ -79,10 +80,12 @@ end
 function _build_vlm(tab::PropellerBladeTable{T}, D, Dh, J;
                     nc::Int=8, ns::Int=15, nRPS::Real=1.0,
                     meanline::MeanLine=_DEFAULT_MEANLINE, tip_rR::Real=0.97,
-                    Kw::Int=32, dψ::Real=deg2rad(20.0), wake_pitch::Symbol=:geometric,
-                    core_frac::Real=0.1, wake_core_frac::Real=0.1) where T
+                    Kw::Int=32, dψ::Real=deg2rad(20.0), wake_pitch::Symbol=:transition,
+                    core_frac::Real=0.1, wake_core_frac::Real=0.1,
+                    pitch_corr::Real=1.9454) where T
     R = D/2; ω = T(2π*nRPS); Va = T(J*nRPS*D)
-    cg = vlm_camber_grid(tab, D, Dh; nc=nc, ns=ns, meanline=meanline, tip_rR=tip_rR)
+    cg = vlm_camber_grid(tab, D, Dh; nc=nc, ns=ns, meanline=meanline, tip_rR=tip_rR,
+                         pitch_corr=pitch_corr)
     # quarter-chord corner lines: QL[i] at 1/4 of panel i; QL[nc+1] = TE
     QL = Matrix{SVector{3,T}}(undef, nc+1, ns+1)
     @inbounds for j in 1:ns+1
@@ -106,23 +109,35 @@ function _build_vlm(tab::PropellerBladeTable{T}, D, Dh, J;
         push!(area, norm(d1 × d2)/2)
     end
     # helical wake: per spanwise strip, march the two TE edge points
-    # downstream at the local pitch; wake rings carry the TE ring's Γ.
-    # wake helix pitch P (axial advance per revolution): :geometric = the
-    # blade pitch P=(P/D)·D; :advance = the undisturbed advance Va/n;
-    # :hydro = geometric mean of the two (a moderately-loaded-wake estimate
-    # of the hydrodynamic pitch, between advance and geometric).
+    # downstream by Δψ in azimuth, accumulating axial advance z (= ∫ r·tanβ dψ).
+    # wake pitch (axial advance per revolution): :geometric = the blade pitch
+    # P=(P/D)·D; :advance = the undisturbed advance Va/n; :hydro = geometric
+    # mean of the two; :transition = ease the pitch *angle* from the blade
+    # geometric pitch at the TE to mean(geometric, advance) downstream (a
+    # Kerwin-style transition wake). Wake rings carry the TE ring's Γ.
     Padv = Va / T(nRPS)
     wpitch(rR) = (Pg = _interp(tab.rR, tab.PD, rR)*D;
                   wake_pitch === :geometric ? Pg :
                   wake_pitch === :advance   ? Padv : sqrt(Pg*Padv))
+    # blade geometric pitch *angle* (DDFI-corrected, matching the blade TE)
+    wβ(rR) = atan(_interp(tab.rR, tab.PD, rR)/(π*rR)) -
+             T(pitch_corr)*_interp(tab.rR, tab.fc, rR)*_interp(tab.rR, tab.tc, rR)
+    trans = wake_pitch === :transition
     @inbounds for j in 1:ns
         te_l = cg[nc+1,j]; te_r = cg[nc+1,j+1]
         rRl = hypot(te_l[1],te_l[2])/R; rRr = hypot(te_r[1],te_r[2])/R
-        Pl = wpitch(rRl); Pr = wpitch(rRr)
-        prev_l = te_l; prev_r = te_r
+        rl = rRl*R; rr = rRr*R
+        βgl = wβ(rRl); βgr = wβ(rRr)                       # near-wake (geometric)
+        βul = T(0.5)*(βgl + atan(Va/(ω*rl)))               # ultimate = mean(geom, advance)
+        βur = T(0.5)*(βgr + atan(Va/(ω*rr)))
+        cl = wpitch(rRl)/T(2π); cr = wpitch(rRr)/T(2π)     # constant-pitch advance/dψ
+        prev_l = te_l; prev_r = te_r; zl = te_l[3]; zr = te_r[3]
         for m in 1:Kw
-            # advance azimuth by dψ; axial step from local pitch: Δz = Δψ·P/2π
-            nl = _wake_step(te_l, m*dψ, Pl); nr = _wake_step(te_r, m*dψ, Pr)
+            f = Kw > 1 ? T((m-1)/(Kw-1)) : zero(T)
+            zl += dψ * (trans ? rl*tan(βgl + f*(βul-βgl)) : cl)
+            zr += dψ * (trans ? rr*tan(βgr + f*(βur-βgr)) : cr)
+            pl = _rotz(te_l, m*dψ); pr = _rotz(te_r, m*dψ)
+            nl = SVector{3,T}(pl[1], pl[2], zl); nr = SVector{3,T}(pr[1], pr[2], zr)
             push!(elems, VElem{T}((prev_l, nl, nr, prev_r), lin(nc,j)))
             prev_l = nl; prev_r = nr
         end
@@ -136,14 +151,6 @@ function _build_vlm(tab::PropellerBladeTable{T}, D, Dh, J;
     wrc = T(wake_core_frac) * ℓ
     PropellerVLM{T}(elems, cp, nrm, bseg, area, nc, ns, tab.Z, Va, ω, T(nRPS), T(D),
                     rc, wrc, nc*ns)
-end
-
-# Wake point: rotate the TE edge point by +Δψ about z and advance axially
-# downstream by Δψ·P/2π — the propeller's geometric-pitch helix (winds with
-# the rotation, like the blade's own helicoidal surface continued downstream).
-@inline function _wake_step(te::SVector{3,T}, Δψ, P) where T
-    p = _rotz(te, Δψ)
-    SVector{3,T}(p[1], p[2], te[3] + T(Δψ*P/(2π)))
 end
 
 # Total induced velocity at p from all elements, with per-element Γ given
@@ -180,15 +187,16 @@ at advance ratio `J`. Returns a `NamedTuple`:
 | `force` | pressure-normal force vector per panel (key blade) |
 | `nc`, `ns` | chordwise / spanwise panel counts |
 
-The result is mesh- and wake-converged (geometric-pitch helical wake +
-pressure-normal forces; see the module header). `C_LE` (leading-edge suction)
-and `C_Drag` (friction) are the Anevlavi-Belibassakis calibration
-coefficients. The defaults `C_LE=0.80`, `C_Drag=0.010` reproduce the DTMB 4382
-open-water point at J=0.889 (KT≈0.210, 10·KQ≈0.452, η≈0.659 vs experimental
-0.208 / 0.445 / 0.661) for this package's section approximations (exact NACA
-a=0.8 mean line + a NACA-4-digit thickness stand-in for NACA 66-mod); the
-paper itself quotes C_LE≈0.90, C_Drag≈0.0050 with its exact NACA 66-mod
-sections.
+The result is mesh- and wake-converged. Defaults turn on the **transition
+wake** (`wake_pitch=:transition` — pitch eases from the blade's geometric
+pitch at the TE to mean(geometric, advance) downstream) and a **lifting-
+surface pitch correction** (`pitch_corr=1.9454`, subtracting a no-lift-angle
+term ∝ (f/c)·(t/c)); see the module header. `C_LE` (leading-edge suction) and
+`C_Drag` (friction) are the Anevlavi-Belibassakis calibration coefficients.
+With the defaults `C_LE=0.80`, `C_Drag=0.010` the DTMB 4382 open-water point
+at J=0.889 is KT≈0.207, 10·KQ≈0.444, η≈0.659 vs experimental 0.208 / 0.445 /
+0.661, for this package's section approximations (exact NACA a=0.8 mean line +
+a NACA-4-digit thickness stand-in for NACA 66-mod).
 
 # Example
 ```julia
@@ -198,11 +206,12 @@ openwater_vlm(dtmb4382, 6.0, 1.2, 0.889)   # → (KT≈0.21, KQ≈0.045, η≈0.
 function openwater_vlm(tab::PropellerBladeTable{T}, D, Dh, J;
                        nc::Int=10, ns::Int=18, nRPS::Real=1.0,
                        meanline::MeanLine=_DEFAULT_MEANLINE, tip_rR::Real=0.97,
-                       Kw::Int=96, dψ::Real=deg2rad(15.0), wake_pitch::Symbol=:geometric,
+                       Kw::Int=96, dψ::Real=deg2rad(15.0), wake_pitch::Symbol=:transition,
                        core_frac::Real=0.1, wake_core_frac::Real=0.1,
+                       pitch_corr::Real=1.9454,
                        C_LE::Real=0.80, C_Drag::Real=0.010, ρ::Real=1.0) where T
     vlm = _build_vlm(tab, D, Dh, J; nc, ns, nRPS, meanline, tip_rR, Kw, dψ, wake_pitch,
-                     core_frac, wake_core_frac)
+                     core_frac, wake_core_frac, pitch_corr)
     N = nc*ns
     # Influence matrix: A[i,k] = Σ_elements(parent=k) Σ_blades  v_ring·n_i
     A = zeros(T, N, N); rhs = zeros(T, N)

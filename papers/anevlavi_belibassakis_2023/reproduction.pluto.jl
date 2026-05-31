@@ -113,7 +113,8 @@ begin
     function secpt(rR, xc, D; surface=:camber, blade=1)
         R = D/2; r = rR*R
         c = interp(RR, CD, rR)*D
-        β = pitchangle(rR)
+        # geometric pitch, less a lifting-surface no-lift-angle correction ∝ (f/c)(t/c)
+        β = pitchangle(rR) - 1.9454*interp(RR, FC, rR)*interp(RR, TC, rR)
         fmax = interp(RR, FC, rR)*c; tmax = interp(RR, TC, rR)*c
         θs = deg2rad(interp(RR, SK, rR))
         s = (xc - 0.5)*c
@@ -202,7 +203,7 @@ begin
     # relative onset flow: axial advance Va + rotation (handedness ⇒ flow LE→TE)
     inflow(p,Va,ω) = SVector(-ω*p[2], ω*p[1], Va)
 
-    "Build the key-blade lattice + geometric-pitch helical wake."
+    "Build the key-blade lattice + transition helical wake."
     function build(D, Dh, J; nc=NC, ns=NS, Kw=64, dψ=deg2rad(15), nRPS=1.0, tip=0.97, cf=0.1)
         R=D/2; ω=2π*nRPS; Va=J*nRPS*D
         cg = camber_grid(D, Dh; nc=nc, ns=ns, tip=tip)
@@ -218,13 +219,20 @@ begin
             push!(nrm, nv/norm(nv)); push!(bseg, (QL[i,j],QL[i,j+1])); push!(area, norm(nv)/2)
         end
         nb = length(elems)
+        # transition wake: pitch eases from the blade's pitch at the TE to
+        # mean(geometric, advance) downstream; march azimuth, accumulate axial z
+        βgeo(rR) = atan(interp(RR,PD,rR)/(π*rR)) - 1.9454*interp(RR,FC,rR)*interp(RR,TC,rR)
         for j in 1:ns
             tel = cg[nc+1,j]; ter = cg[nc+1,j+1]
-            Pl = interp(RR,PD,hypot(tel[1],tel[2])/R)*D; Pr = interp(RR,PD,hypot(ter[1],ter[2])/R)*D
-            pl=tel; pr=ter
+            rRl = hypot(tel[1],tel[2])/R; rRr = hypot(ter[1],ter[2])/R; rl = rRl*R; rr = rRr*R
+            βgl = βgeo(rRl); βgr = βgeo(rRr)
+            βul = 0.5*(βgl + atan(Va/(ω*rl))); βur = 0.5*(βgr + atan(Va/(ω*rr)))
+            pl=tel; pr=ter; zl=tel[3]; zr=ter[3]
             for m in 1:Kw
-                wl=rotz(tel,m*dψ); wl=SVector(wl[1],wl[2],tel[3]+m*dψ*Pl/(2π))
-                wr=rotz(ter,m*dψ); wr=SVector(wr[1],wr[2],ter[3]+m*dψ*Pr/(2π))
+                f = Kw>1 ? (m-1)/(Kw-1) : 0.0
+                zl += dψ*rl*tan(βgl + f*(βul-βgl)); zr += dψ*rr*tan(βgr + f*(βur-βgr))
+                ql = rotz(tel,m*dψ); qr = rotz(ter,m*dψ)
+                wl = SVector(ql[1],ql[2],zl); wr = SVector(qr[1],qr[2],zr)
                 push!(elems, Elem((pl,wl,wr,pr), lin(nc,j))); pl=wl; pr=wr
             end
         end
@@ -324,12 +332,15 @@ sheet**. As the blade sheds circulation, vorticity leaves the trailing edge
 and is carried downstream, winding into a helix because the blade is both
 advancing (axially) and rotating.
 
-A subtle but decisive modelling choice: we put the wake on the propeller's
-**geometric-pitch helix** — the downstream continuation of the blade's own
-helicoidal surface, winding *with* the rotation. It trails off cleanly behind
-the blades. (A "more physical"-looking flow-aligned helix winds the *opposite*
-way, cuts back across the blade, and makes the linear system singular — the
-geometric wake is what keeps the method well-posed.)
+A subtle but decisive modelling choice: the wake winds *with* the rotation —
+the downstream continuation of the blade's own helicoidal surface. It trails
+off cleanly behind the blades. (A "more physical"-looking flow-aligned helix
+winds the *opposite* way, cuts back across the blade, and makes the linear
+system singular — winding with the rotation is what keeps the method
+well-posed.) We use a **transition wake**: it leaves the trailing edge at the
+blade's geometric pitch and relaxes to a shallower mean pitch (between the
+geometric and the advance pitch) over its length — the classic compromise
+between a wake frozen to the blade and one aligned with the through-flow.
 
 The wake matters because it induces a **downwash** at the blades that trims
 their effective angle of attack — it is how the slipstream's momentum feeds

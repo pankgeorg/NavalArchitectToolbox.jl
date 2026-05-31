@@ -27,21 +27,25 @@ At the design advance ratio J = 0.889:
 
 | coefficient | NAT VLM | experiment |
 |---|---|---|
-| KT      | 0.210 | 0.208 |
-| 10·KQ   | 0.452 | 0.445 |
-| η       | 0.659 | 0.661 |
+| KT      | 0.207 | 0.208 |
+| 10·KQ   | 0.444 | 0.445 |
+| η       | 0.660 | 0.661 |
 
-Mesh- and wake-converged. Three details make or break it:
+Mesh- and wake-converged. Key details that make or break it:
 
-1. **Wake = the propeller's *geometric*-pitch helix** (winds *with* the
-   rotation, the downstream extension of the blade surface). A flow-aligned
-   wake at the advance pitch winds the opposite way, grazes the control
-   points, and makes the influence matrix singular.
+1. **Helical wake winding *with* the rotation** (the downstream extension of
+   the blade surface). A flow-aligned wake at the advance pitch winds the
+   opposite way, grazes the control points, and makes the influence matrix
+   singular. By default the wake is a **transition wake** (pitch eases from
+   the blade's geometric pitch at the TE to mean(geometric, advance)
+   downstream — `wake_pitch=:transition`).
 2. **Pressure-normal forces, not Kutta–Joukowski** — the ring force is
    Δp·A·n̂ along the *surface normal* (Δc_p = C_LE·2·V_m·G/V∞²). The
    geometric force direction gives the correct η; Γ×V gives η > 4.
 3. **Handedness consistency** — the relative inflow must run LE→TE with the
    camber on the suction side; backwards inflates the AoA ~6×.
+4. A small **lifting-surface pitch correction** (`pitch_corr=1.9454`, default
+   on) subtracts a no-lift-angle term ∝ (f/c)·(t/c) from the geometric pitch.
 
 The full reproduction (paper citation, code, figures) lives in
 [`papers/anevlavi_belibassakis_2023/`](papers/anevlavi_belibassakis_2023).

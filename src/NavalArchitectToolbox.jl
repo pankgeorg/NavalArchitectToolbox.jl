@@ -180,19 +180,24 @@ Section pitch angle `β = atan(P/(2πr)) = atan((P/D)/(π·r/R))`.
 pitch_angle(tab::PropellerBladeTable, rR) = atan(_interp(tab.rR, tab.PD, rR) / (π * rR))
 
 """
-    dimensional(tab, rR, D) -> (r, c, β, tmax, fmax, θskew, rake)
+    dimensional(tab, rR, D; pitch_corr=0.0) -> (r, c, β, tmax, fmax, θskew, rake)
 
 Dimensional section quantities at `r/R = rR` for diameter `D`:
 radius, chord, pitch angle (rad), max thickness, max camber, skew (rad),
 axial rake.
+
+`pitch_corr` (default 0, off) subtracts a lifting-surface no-lift-angle
+correction `pitch_corr·(f/c)·(t/c)` from the geometric pitch angle — a
+camber–thickness coupling term (≈1.9454 in the Morgan-Silovic-Denny sense).
 """
-function dimensional(tab::PropellerBladeTable, rR, D)
+function dimensional(tab::PropellerBladeTable, rR, D; pitch_corr::Real=0.0)
     R = D/2
     r = rR * R
     c = _interp(tab.rR, tab.cD, rR) * D
-    β = atan(_interp(tab.rR, tab.PD, rR) / (π * rR))
-    tmax = _interp(tab.rR, tab.tc, rR) * c
-    fmax = _interp(tab.rR, tab.fc, rR) * c
+    foc = _interp(tab.rR, tab.fc, rR); toc = _interp(tab.rR, tab.tc, rR)
+    β = atan(_interp(tab.rR, tab.PD, rR) / (π * rR)) - pitch_corr*foc*toc
+    tmax = toc * c
+    fmax = foc * c
     θs   = deg2rad(_interp(tab.rR, tab.skew, rR))
     rake = _interp(tab.rR, tab.rake, rR) * R
     return (; r, c, β, tmax, fmax, θs, rake)
@@ -220,8 +225,9 @@ radius `r`, then offset by skew (circumferential) and rake (axial):
 function blade_section_point(tab::PropellerBladeTable{T}, rR, xc, D;
                              surface::Symbol=:camber, blade::Int=1,
                              meanline::MeanLine=_DEFAULT_MEANLINE,
-                             thickness::Thickness=NACA66ish()) where T
-    g = dimensional(tab, rR, D)
+                             thickness::Thickness=NACA66ish(),
+                             pitch_corr::Real=0.0) where T
+    g = dimensional(tab, rR, D; pitch_corr=pitch_corr)
     s = (xc - one(T)/2) * g.c                       # chordwise dist from mid-chord
     yc = g.fmax * meanline(xc)                      # camber
     yt = g.tmax * thickness(xc) / 2                 # half-thickness
@@ -256,7 +262,7 @@ c/D collapses). `Dh` is the hub diameter; the root station is `Dh/D`.
 function vlm_camber_grid(tab::PropellerBladeTable{T}, D, Dh;
                          nc::Int=8, ns::Int=16, blade::Int=1,
                          meanline::MeanLine=_DEFAULT_MEANLINE,
-                         tip_rR::Real=0.98) where T
+                         tip_rR::Real=0.98, pitch_corr::Real=0.0) where T
     rR_hub = Dh / D
     # Terminate the lifting surface just inboard of the geometric tip:
     # at r/R=1 the chord collapses to ~0, giving degenerate VLM panels.
@@ -265,7 +271,7 @@ function vlm_camber_grid(tab::PropellerBladeTable{T}, D, Dh;
     grid = Matrix{SVector{3,T}}(undef, nc+1, ns+1)
     for (js, rR) in pairs(rRs), (ic, xc) in pairs(xcs)
         grid[ic, js] = blade_section_point(tab, rR, xc, D;
-            surface=:camber, blade=blade, meanline=meanline)
+            surface=:camber, blade=blade, meanline=meanline, pitch_corr=pitch_corr)
     end
     return grid
 end
