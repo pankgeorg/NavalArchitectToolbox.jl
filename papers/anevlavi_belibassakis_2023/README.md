@@ -62,6 +62,19 @@ Run `forces.jl` for the blade loading:
   decomposition into the axial component (thrust) and the tangential
   component (shaft torque).
 
+## Interactive notebook
+
+`reproduction.pluto.jl` is a **self-contained [Pluto](https://plutojl.org)
+notebook** that walks through the whole story — table → 3-D blade → vortex
+lattice → helical wake → forces → open-water curve — with an interactive
+advance-ratio slider. It depends only on registered packages (StaticArrays,
+CairoMakie, PlutoUI); the geometry and solver are written out inline, so it
+needs nothing from this package. Open it with:
+
+```julia
+using Pluto; Pluto.run()   # then open reproduction.pluto.jl
+```
+
 ## What it took to reproduce (the three subtleties)
 
 1. **Wake = the propeller's *geometric*-pitch cylindrical helix** (winds
