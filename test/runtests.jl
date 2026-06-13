@@ -144,6 +144,68 @@ using StaticArrays
         @test isfinite(r.CDi)
     end
 
+    @testset "phase_transport_1d — upwind bounded & conservative" begin
+        r = phase_transport_1d(; N=100, u=1.0, Co=0.5, t_end=0.2)
+        @test length(r.x) == 100
+        @test r.dx ≈ 0.01 && r.dt ≈ 0.005
+        # boundedness: first-order upwind cannot over/undershoot [0,1]
+        @test minimum(r.α) ≥ -1e-12
+        @test maximum(r.α) ≤ 1.0 + 1e-12
+        # the patch has advected: peak is now near x≈0.5 (translated [0.4,0.6])
+        @test 0.4 < r.x[argmax(r.α)] < 0.6
+        # the analytic translate is the patch on [0.4,0.6]
+        @test all(0.4 .≤ r.x[r.α_analytic .> 0.5] .≤ 0.6)
+        # mass is conserved up to what has advected through the outlet.
+        # At t=0.2 the patch [0.4,0.6] is fully inside the domain → mass ≈ mass0.
+        @test isapprox(r.mass, r.mass0; rtol=1e-9)
+    end
+
+    @testset "phase_transport_1d — compression sharpens & stays bounded" begin
+        r0 = phase_transport_1d(; N=100, u=1.0, Co=0.5, t_end=0.2, compression=false)
+        r1 = phase_transport_1d(; N=100, u=1.0, Co=0.5, t_end=0.2, compression=true, Cα=1.0)
+        w0 = interface_width(r0.x, r0.α)
+        w1 = interface_width(r1.x, r1.α)
+        @test isfinite(w0) && isfinite(w1)
+        @test w1 < w0                                   # compression re-steepens
+        @test minimum(r1.α) ≥ -1e-12                    # bounded below
+        @test maximum(r1.α) ≤ 1.0 + 1e-12               # bounded above
+        # compression still conserves mass (conservative flux + clip near sharp)
+        @test isapprox(r1.mass, r1.mass0; rtol=5e-3)
+        # peak fraction stays sharper (closer to 1) with compression
+        @test maximum(r1.α) ≥ maximum(r0.α) - 1e-9
+    end
+
+    @testset "als_drag_reduction — bounded, monotone, right trend" begin
+        # DR in [0,1), rises with film thickness, saturates toward 1
+        thin  = als_drag_reduction(; delta=0.05, t_air=1e-4, U=10.0)
+        thick = als_drag_reduction(; delta=0.05, t_air=5e-3, U=10.0)
+        @test 0 ≤ thin.DR < 1 && 0 ≤ thick.DR < 1
+        @test thick.DR > thin.DR                         # more film → more DR
+        @test thick.tau_air < thin.tau_air < thin.tau_clean
+        @test thin.tau_clean ≈ thick.tau_clean           # clean shear independent of film
+        # μ_w/μ_a ≈ 55..65 (the leverage that makes thin films effective)
+        @test 40 < thin.mu_ratio < 80
+        # a continuous film a few % of δ already gives tens of % DR (ALDR signature)
+        mid = als_drag_reduction(; delta=0.05, t_air=2e-3, U=10.0)
+        @test 0.4 < mid.DR < 0.95
+        # zero film → zero DR
+        @test als_drag_reduction(; delta=0.05, t_air=0.0).DR == 0.0
+    end
+
+    @testset "als_sweep + ship saving" begin
+        sw = als_sweep(; delta=0.05, t_airs=[1e-4, 5e-4, 1e-3, 5e-3], U=12.0)
+        @test length(sw) == 4
+        @test issorted([s.DR for s in sw])               # monotone rising
+        @test all(0 .≤ [s.DR for s in sw] .< 1)
+        # ship application: DTC-like hull, friction saving must be a sane fraction
+        sh = als_ship_saving(; L=355.0, B=51.0, T=15.0, Cb=0.66, U=12.0,
+                             frac_covered=0.5, t_air=2e-3)
+        @test sh.S > 0 && sh.Re > 1e8
+        @test 0 < sh.saving_pct < 50                     # partial coverage → partial saving
+        @test sh.Rf_air < sh.Rf_clean
+        @test sh.dRf_kN > 0
+    end
+
     @testset "thickness: upper/lower straddle camber, vanish at LE/TE" begin
         t = dtmb4382; D = 6.0
         cam = blade_section_point(t, 0.5, 0.5, D; surface=:camber)

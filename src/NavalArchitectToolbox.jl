@@ -35,6 +35,8 @@ export blade_surface, vlm_camber_grid, pitch_angle, dimensional, blade_sdf
 export openwater_vlm
 export Wing, wing_forces
 export flettner_panel, flettner_analytic
+export phase_transport_1d, default_patch, interface_width
+export als_drag_reduction, als_sweep, als_ship_saving, ittc_cf
 
 # ----------------------------------------------------------------------------
 # The section table
@@ -382,5 +384,7 @@ end
 
 include("vlm.jl")
 include("flettner.jl")
+include("phase_transport.jl")
+include("als.jl")
 
 end # module
