@@ -152,7 +152,12 @@ flat-plate friction coefficient `C_f`, and the clean frictional resistance
 `Rf_clean = ½ ρ_w U² S C_f`. The air layer is applied over a fraction
 `frac_covered` of `S` (typically a flat-bottom patch) with film thickness
 `t_air`; the boundary-layer thickness defaults to a turbulent flat-plate
-estimate `δ ≈ 0.16 L Re^(-1/7)` at the mid-body if `delta` is not given.
+estimate `δ ≈ 0.16 L Re^(-1/7)` (evaluated at x = L) if `delta` is not
+given. This is the **high-Reynolds** turbulent BL correlation (1/7-power
+profile closed with the logarithmic skin-friction law; Schlichting &
+Gersten, *Boundary-Layer Theory*, 9th ed., Springer 2017) — the
+appropriate form at ship Re (~10⁸–10⁹), where the lower-Re
+`δ/x = 0.37 Re_x^(-1/5)` (valid only to Re_x ~ 10⁷) under-predicts δ.
 Returns the clean/with-air friction resistances, the DR fraction, the
 absolute saving (kN), and the percentage saving on the friction component.
 
@@ -167,7 +172,9 @@ function als_ship_saving(; L::Real, B::Real, T::Real, Cb::Real=0.6,
     Re = U * L / nu_w
     Cf = ittc_cf(Re)
     Rf_clean = 0.5 * rho_w * U^2 * S * Cf
-    δ = delta === nothing ? 0.16 * L * Re^(-1/7) : delta   # turbulent BL at ~mid-body
+    # turbulent flat-plate BL thickness at x = L: high-Re 1/7-power+log form
+    # (Schlichting & Gersten 2017), preferred over 0.37 Re^(-1/5) at ship Re.
+    δ = delta === nothing ? 0.16 * L * Re^(-1/7) : delta
     dr = als_drag_reduction(; delta = δ, t_air, U, Re, rho_w, kw...)
     # DR applies only over the covered fraction of the wetted area
     Rf_air = Rf_clean * (1 - frac_covered * dr.DR)
