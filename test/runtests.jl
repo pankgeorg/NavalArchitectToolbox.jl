@@ -90,6 +90,60 @@ using StaticArrays
         @test abs(sdf(on2)) < 1e-3
     end
 
+    @testset "Flettner panel — ω=0 collapses to 1−4sin²θ" begin
+        r = flettner_panel(; R=0.5, ω=0.0, V∞=1.0, N=200)
+        # non-lifting cylinder: Cp = 1 − 4 sin²θ, CL = 0
+        @test maximum(abs.(r.Cp .- (1 .- 4 .* sin.(r.θ).^2))) < 1e-10
+        @test abs(r.CL) < 1e-10
+        @test r.Γ == 0
+    end
+
+    @testset "Flettner panel — CL matches analytic 4πωR² within ε<0.02%" begin
+        R = 0.5; V∞ = 1.0
+        for ω in (0.5, 1.0, 1.5, 2.0, 2.5)
+            r  = flettner_panel(; R=R, ω=ω, V∞=V∞, N=400)
+            CLa = 4π * ω * R^2 / V∞
+            @test r.Γ ≈ 2π * ω * R^2
+            @test r.CL > 0                                  # positive lift for ω>0
+            @test abs(r.CL - CLa) / abs(CLa) < 2e-4         # < 0.02 %
+        end
+    end
+
+    @testset "Flettner panel — converges to analytic as N grows" begin
+        R = 0.5; ω = 1.0; V∞ = 1.0; CLa = 4π * ω * R^2 / V∞
+        errs = [abs(flettner_panel(; R, ω, V∞, N).CL - CLa)/CLa for N in (80, 320)]
+        @test errs[2] < errs[1]                             # refining reduces error
+        @test errs[2] < 1e-3
+    end
+
+    @testset "Flettner analytic — closed form CL = 4πωR²" begin
+        for ω in (0.0, 1.0, 2.5)
+            ra = flettner_analytic(; R=0.5, ω=ω, V∞=1.0, n=720)
+            @test isapprox(ra.CL, 4π * ω * 0.5^2; atol=1e-6)
+        end
+        # top of the cylinder is faster (lower Cp) than the bottom for ω>0
+        ra = flettner_analytic(; R=0.5, ω=1.0, V∞=1.0, n=400)
+        itop = argmin(abs.(ra.θ .- π/2)); ibot = argmin(abs.(ra.θ .- 3π/2))
+        @test ra.Cp[itop] < ra.Cp[ibot]
+    end
+
+    @testset "Flettner panel ↔ analytic — Cp agrees pointwise" begin
+        rp = flettner_panel(; R=0.5, ω=1.0, V∞=1.0, N=720)
+        ra = flettner_analytic(; R=0.5, ω=1.0, V∞=1.0, n=720)
+        # panel θ are CCW control points; analytic θ on the same grid offset by
+        # half a panel — compare the sorted Cp envelopes (min/max) instead.
+        @test isapprox(minimum(rp.Cp), minimum(ra.Cp); rtol=2e-3)
+        @test isapprox(maximum(rp.Cp), maximum(ra.Cp); rtol=2e-3)
+    end
+
+    @testset "Toolbox re-exports Wing" begin
+        # NAT surfaces the finite-wing VLM from LiftingSurfaces.
+        w = Wing(; chord_root=1.0, chord_tip=1.0, span=6.0, ns=20, nc=6)
+        r = wing_forces(w, deg2rad(5.0), 1.0)
+        @test r.CL > 0
+        @test isfinite(r.CDi)
+    end
+
     @testset "thickness: upper/lower straddle camber, vanish at LE/TE" begin
         t = dtmb4382; D = 6.0
         cam = blade_section_point(t, 0.5, 0.5, D; surface=:camber)

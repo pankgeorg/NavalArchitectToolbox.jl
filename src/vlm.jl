@@ -4,6 +4,15 @@
 # rotation ω about +z. Solve ONE (key) blade; the other Z−1 blades enter
 # through rotation symmetry.
 #
+# Pedagogical companion: the Pluto notebook (pluto.land/n/by81dm28, raw at
+# bucket1.pluto.land/n/01KSZ5QK4MAD8N4AAPNWZ5Z731.jl) walks the same
+# algorithm step-by-step. This packaged kernel is the strict superset: it
+# adds the parameterized `wake_pitch` switch (:transition/:geometric/
+# :advance/:hydro vs the notebook's fixed transition wake), a separate
+# `wake_core_frac`, a free element type `T`, and the per-panel `Vm` field.
+# Reconciled 2026-06-13 — the two agree on the :transition default; no
+# notebook-only behaviour was missing from the package.
+#
 # Key details (the first is the most error-prone):
 #  (1) WAKE = a cylindrical helix winding the SAME sense as the rotation
 #      (+ψ as z increases), so it trails off cleanly behind the blade and never

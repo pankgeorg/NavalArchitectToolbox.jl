@@ -20,10 +20,21 @@ module NavalArchitectToolbox
 
 using StaticArrays
 
+# The unified "naval tools" surface. NAT re-exports the finite-wing VLM from
+# LiftingSurfaces.jl so `using NavalArchitectToolbox` brings up, in one place:
+#   • the propeller open-water VLM   (`openwater_vlm`, `dtmb4382`, …)
+#   • the finite-wing VLM            (`Wing`, `wing_forces` — from LiftingSurfaces)
+#   • the 2D Flettner-rotor panel    (`flettner_panel`, `flettner_analytic`)
+# The viscous Flettner run lives in ShipFlow.jl (it needs the WaterLily dep);
+# NAT itself stays light (LinearAlgebra + StaticArrays + LiftingSurfaces).
+using LiftingSurfaces: Wing, wing_forces
+
 export PropellerBladeTable, read_blade_table, dtmb4382
 export ParabolicMeanLine, NACAMeanLine, NACA66ish, blade_section_point
 export blade_surface, vlm_camber_grid, pitch_angle, dimensional, blade_sdf
 export openwater_vlm
+export Wing, wing_forces
+export flettner_panel, flettner_analytic
 
 # ----------------------------------------------------------------------------
 # The section table
@@ -370,5 +381,6 @@ function blade_sdf(tab::PropellerBladeTable{T}, D, Dh;
 end
 
 include("vlm.jl")
+include("flettner.jl")
 
 end # module

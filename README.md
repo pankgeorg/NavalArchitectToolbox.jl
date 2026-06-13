@@ -87,6 +87,71 @@ r = openwater_vlm(t, 6.0, 1.2, 0.889)          # (; KT, KQ, η, Γ, cp, dcp, for
   skin) for `WaterLily.AutoBody` / `ShipShapes.TabulatedHull`.
 - **`openwater_vlm`** — the validated key-blade vortex-ring open-water
   solver; returns coefficients plus per-panel circulation, Δc_p and forces.
+- **`flettner_panel` / `flettner_analytic`** — 2D rotating-cylinder
+  (Flettner-rotor) potential flow: Hess–Smith source panels + a prescribed
+  Magnus circulation, validated against the closed form to ε < 0.02 %.
+- **`Wing` / `wing_forces`** — finite-wing VLM, re-exported from
+  LiftingSurfaces.jl (the unified toolbox surface).
+
+## The unified "naval tools" surface
+
+`using NavalArchitectToolbox` now brings up three lifting/circulation
+solvers in one place:
+
+- **Propeller open-water VLM** — `openwater_vlm`, `dtmb4382` (above).
+- **Finite-wing VLM** — `Wing`, `wing_forces`, re-exported from
+  [LiftingSurfaces.jl](https://github.com/pankgeorg/LiftingSurfaces.jl).
+  A generalized finite wing (taper / sweep / twist / dihedral / AoA) over
+  VortexLattice.jl, validated against lifting-line theory (slope, parabolic
+  induced drag). NAT depends on LiftingSurfaces but stays light otherwise.
+- **Flettner-rotor panel method** — `flettner_panel`, `flettner_analytic`
+  (below). Pure Julia (LinearAlgebra + StaticArrays only).
+
+The *viscous* Flettner run (WaterLily) lives in ShipFlow.jl, which has the
+WaterLily dependency — NAT itself never takes a WaterLily dep.
+
+## Flettner rotor — 2D rotating-cylinder potential flow
+
+`flettner_panel` is a Hess–Smith constant-strength source-panel solve for a
+smooth cylinder of radius `R` in a uniform stream `V∞`, spinning at rate `ω`
+with the Magnus bound circulation `Γ = 2πωR²` imposed directly (no Kutta
+condition — a smooth cylinder has no trailing edge). It returns the surface
+`Cp(θ)` and the lift `C_L = ½∮ −Cp sinθ dθ`. `flettner_analytic` gives the
+closed-form reference `Cp = 1 − ((2V∞ sinθ + Γ/(2πR))/V∞)²`, `C_L = 4πωR²/V∞`.
+
+```julia
+r = flettner_panel(; R=0.5, ω=1.0, V∞=1.0, N=160)
+@show r.CL r.Γ            # CL ≈ 3.1422 vs analytic 4πωR² = 3.1416
+```
+
+**Validation** (R=0.5, V∞=1): at ω=0 the panel collapses exactly to the
+classic non-lifting cylinder `Cp = 1 − 4sin²θ` (max error 1e-14, CL=0).
+Grid refinement drives `ε(C_L)` below the assignment's 0.02 % tolerance at
+**N = 160 panels** (and the error is ω-independent — it lives in the
+geometry discretization, not the circulation):
+
+| N | C_L (ω=1) | ε vs 4πωR² |
+|---:|---:|---:|
+|  40 | 3.1513 | 0.31 % |
+|  80 | 3.1440 | 0.077 % |
+| 120 | 3.1427 | 0.034 % |
+| **160** | **3.1422** | **0.019 %** |
+| 320 | 3.1418 | 0.0055 % |
+
+ω sweep at N=160 (all rows ε = 0.019 %):
+
+| ω | Γ = 2πωR² | C_L (panel) | C_L (analytic) |
+|---:|---:|---:|---:|
+| 0.0 | 0.000 | 0.000 | 0.000 |
+| 0.5 | 0.785 | 1.5711 | 1.5708 |
+| 1.0 | 1.571 | 3.1422 | 3.1416 |
+| 1.5 | 2.356 | 4.7133 | 4.7124 |
+| 2.0 | 3.142 | 6.2844 | 6.2832 |
+| 2.5 | 3.927 | 7.8555 | 7.8540 |
+
+The potential-vs-viscous comparison (where the real boundary layer makes
+C_L grow far more slowly with ω) is in
+[`../ShipFlow.jl/RESULTS-flettner.md`](../ShipFlow.jl/RESULTS-flettner.md).
 
 ## Examples & papers
 
