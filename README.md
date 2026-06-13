@@ -107,6 +107,10 @@ solvers in one place:
 - **Flettner-rotor panel method** — `flettner_panel`, `flettner_analytic`
   (below). Pure Julia (LinearAlgebra + StaticArrays only).
 
+Plus two pure-Julia two-phase-flow / drag-reduction mini-tools:
+`phase_transport_1d` (1D VOF advection + interface compression) and
+`als_drag_reduction` (reduced air-layer drag-reduction model) — see below.
+
 The *viscous* Flettner run (WaterLily) lives in ShipFlow.jl, which has the
 WaterLily dependency — NAT itself never takes a WaterLily dep.
 
@@ -152,6 +156,57 @@ geometry discretization, not the circulation):
 The potential-vs-viscous comparison (where the real boundary layer makes
 C_L grow far more slowly with ω) is in
 [`../ShipFlow.jl/RESULTS-flettner.md`](../ShipFlow.jl/RESULTS-flettner.md).
+
+## Two-phase / air-lubrication mini-tools
+
+Two small, pure-Julia (LinearAlgebra + StaticArrays only) tools for the
+two-phase-flow and drag-reduction themes:
+
+### `phase_transport_1d` — 1D volume-fraction advection (+ interface compression)
+
+Solves `∂α/∂t + ∇·(uα) = 0` with first-order upwind + Forward Euler, plus an
+optional artificial **interface-compression** variant `∇·(u_r α(1-α))`,
+`u_r = Cα·u·n̂` — the algebraic-VOF "phase transport equation". The
+compression path is a 1D MULES / Zalesak FCT scheme (monotone upwind base +
+limited anti-diffusive correction), so it stays bounded in `[0,1]` **and**
+conserves mass exactly. It is the 1D explicit sibling of
+`VoF.step_vof_mules!`'s per-face `c_α·|u_f|·n̂·α_f(1-α_f)` compression flux.
+
+```julia
+adv  = phase_transport_1d(; N=100, u=1.0, Co=0.5, t_end=0.2)               # upwind only
+comp = phase_transport_1d(; N=100, u=1.0, Co=0.5, t_end=0.2, compression=true, Cα=1.0)
+interface_width(adv.x,  adv.α)    # ≈ 0.105  (numerical diffusion)
+interface_width(comp.x, comp.α)   # ≈ 0.025  (compression re-steepens)
+```
+
+A water patch initially on `[0.2,0.4]` advects to `[0.4,0.6]` at `t=0.2`
+(`adv.α_analytic` is the exact translate); upwind smears the front, the
+compression variant restores a near-step interface, both mass-conserving.
+
+### `als_drag_reduction` — reduced air-layer drag-reduction model
+
+A two-layer fully-developed shear model (thin air film under a turbulent
+water boundary layer): the low-viscosity film (`μ_w/μ_a ≈ 55`) takes up the
+near-wall velocity jump cheaply, giving a wall-shear reduction
+`DR = r/(1+r)`, `r = (μ_w/μ_a)(t_air/δ)`. `als_ship_saving` anchors the
+absolute shear to the ITTC-1957 friction line and applies the DR to a
+ship's frictional resistance.
+
+```julia
+als_drag_reduction(; delta=0.05, t_air=2e-3, U=10.0).DR        # ≈ 0.72 (72%)
+als_sweep(; delta=0.05, t_airs=[5e-4,1e-3,5e-3], U=12.0)       # DR rising with film
+als_ship_saving(; L=355, B=51, T=15, Cb=0.66, U=12.0, frac_covered=0.5, t_air=2e-3)
+```
+
+It is a **reduced, trend/order-of-magnitude** model of the *continuous-film*
+(air-layer / ALDR) regime — not the dispersed-bubble (BDR) regime, and not a
+quantitative match to Elbing et al. (*JFM* **612**, 2008). It reproduces the
+right trend (DR rises with `t_air/δ` and saturates toward 100% for a thick
+continuous film: ~20% at `t/δ=0.004`, ~72% at `0.04`, >85% at `0.1`) and the
+right order of magnitude (Elbing's ALDR gives ≥80% once the critical air flux
+forms a continuous layer). At full ship scale the boundary layer is thick
+(δ ~ metres), so a thin film is a small `t/δ` there — the saving scales with
+the film-to-BL ratio.
 
 ## Examples & papers
 
