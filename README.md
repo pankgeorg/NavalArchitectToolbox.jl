@@ -208,6 +208,49 @@ forms a continuous layer). At full ship scale the boundary layer is thick
 (δ ~ metres), so a thin film is a small `t/δ` there — the saving scales with
 the film-to-BL ratio.
 
+## Wind-assist sea-trial power analysis — `wap_power_analysis`
+
+Required-propulsion-power change attributable to a wind-assist (WAP) device
+from an `OFF → ON → OFF` sea trial, per a reduced **ITTC 7.5-04-01-02**
+(*Analysis of Speed/Power Trials*). Pure Julia; CSV via stdlib
+`DelimitedFiles`, CDA interpolation reuses the package's 1-D `_interp` — no
+new dependencies.
+
+The tool splits a run into its baseline (OFF) and assisted (ON) segments
+(trimming transients at each transition), fits a power-law speed curve
+`P = a·V^b` to the OFF samples, evaluates it at the ON segment's mean speed,
+and reports `ΔP = P_baseline(V̄_ON) − P̄_ON` (positive ⇒ the device saves
+power). It does this in **two passes**:
+
+- **raw** — straight from the measured SHP, and
+- **corrected** — after removing each sample's apparent-wind superstructure
+  load `R_AA = ½·ρ_air·CDA(|AWA|)·A_T·V_wr²` (converted to power with a stated
+  quasi-propulsive efficiency `η_D`), so the OFF and ON segments are compared
+  at a common zero-apparent-wind reference. The correction matters because the
+  segments rarely see the same natural wind — exactly the confound ITTC removes.
+
+```julia
+coef = read_wind_coef("thema5/added_wind_coef.csv")        # AWA→CDA table
+wind_resistance(10.0, 0.0, coef)                            # head wind: +R_AA [N]
+wind_resistance(10.0, 180.0, coef)                          # following: −R_AA
+fit_power_speed(V, 3 .* V.^3).b                             # ≈ 3
+
+r = wap_power_analysis("thema5/RUN_A.csv", "thema5/added_wind_coef.csv";
+                       A_T=121.4, ρ_air=1.225, η_D=0.7, trim=4)
+r.ΔP_raw, r.ΔP_corr                                         # raw vs wind-corrected [kW]
+wap_power_analysis(["thema5/RUN_A.csv","thema5/RUN_B.csv"], coef_csv)  # combined
+```
+
+**Implemented vs simplified** (stated in the source header): the per-sample
+wind resistance and the power-law speed-curve comparison are implemented in
+full; the resistance→power step is simplified to `ΔP_wind = R_AA·V_s/η_D`
+(only SHP is logged, not thrust, so the thrust-identity load-variation method
+isn't available — `η_D` is an explicit assumption). Added wave resistance,
+density/shallow-water/current corrections are **not** modelled — this is a
+reduced trials-analysis tool, not the full ITTC procedure. A worked demo on
+the Θέμα-5 data is in
+[`../ShipFlow.jl/RESULTS-wap-power.md`](../ShipFlow.jl/RESULTS-wap-power.md).
+
 ## Examples & papers
 
 - `examples/visualize_4382.jl` — radial distributions, expanded outline,

@@ -1,6 +1,6 @@
 using Test
 using NavalArchitectToolbox
-using NavalArchitectToolbox: dimensional, _interp
+using NavalArchitectToolbox: dimensional, _interp, read_trial, read_wind_coef
 using StaticArrays
 
 @testset "NavalArchitectToolbox" begin
@@ -204,6 +204,121 @@ using StaticArrays
         @test 0 < sh.saving_pct < 50                     # partial coverage → partial saving
         @test sh.Rf_air < sh.Rf_clean
         @test sh.dRf_kN > 0
+    end
+
+    # ------------------------------------------------------------------
+    # WAP power-analysis (Q5) — synthetic fixtures, NOT the real trial data
+    # ------------------------------------------------------------------
+
+    # small AWA→CDA table mirroring the supplied one's shape: +ve head, -ve following
+    _COEF = (; awa = Float64[0, 30, 60, 90, 120, 150, 180],
+               cda = Float64[0.88, 0.97, 0.60, 0.04, -0.53, -0.89, -0.81])
+
+    # write a synthetic coef CSV + run CSV to a temp dir, return paths
+    function _write_fixture(dir; on_shp_scale=1.0, awa_off=90.0, awa_on=90.0,
+                            aws_off=10.0, aws_on=10.0, n=20, trim=2,
+                            base_a=1000.0, base_b=3.0)
+        cf = joinpath(dir, "coef.csv")
+        open(cf, "w") do io
+            println(io, "AWA_deg,CDA_10m")
+            for (a,c) in zip(_COEF.awa, _COEF.cda); println(io, a, ",", c); end
+        end
+        rc = joinpath(dir, "run.csv")
+        # OFF speeds span a band so the P=aV^b fit is well posed; ON speeds are
+        # held at a single value (9.5 kn) so the curve-at-mean-speed equals the
+        # mean-of-power on the ON segment (no Jensen-convexity offset), making
+        # the "equal SHP → ΔP≈0" check exact.
+        Voff = range(8.0, 11.0, length=n); Von = fill(9.5, n)
+        open(rc, "w") do io
+            println(io, "DateTime,SOG [kn],STW [kn],Shaft Speed [rpm],SHP [kW],Rudder Angle [deg],AWS [kn],AWA [deg],Status_ON")
+            row(v, shp, aws, awa, st) =
+                println(io, "00:00:00,", v, ",", v, ",225.0,", shp, ",0.0,", aws, ",", awa, ",", st)
+            base(v) = base_a * v^base_b
+            for v in Voff; row(v, base(v),               aws_off, awa_off, "False"); end
+            for v in Von;  row(v, on_shp_scale*base(v),  aws_on,  awa_on,  "True");  end
+            for v in Voff; row(v, base(v),               aws_off, awa_off, "False"); end
+        end
+        return rc, cf, trim
+    end
+
+    @testset "wind_resistance — sign by AWA, zero at AWS=0" begin
+        coef = _COEF
+        @test wind_resistance(10.0, 0.0,   coef) > 0          # head wind: drag
+        @test wind_resistance(10.0, 180.0, coef) < 0          # following: thrust
+        @test wind_resistance(0.0,  0.0,   coef) == 0.0       # no wind, no load
+        # symmetric in sign of AWA (frontal-area coefficient)
+        @test wind_resistance(10.0, -30.0, coef) ≈ wind_resistance(10.0, 30.0, coef)
+        # ∝ AWS²
+        @test wind_resistance(20.0, 0.0, coef) ≈ 4*wind_resistance(10.0, 0.0, coef)
+        # magnitude: ½·1.225·0.88·121.4·10² ≈ 6543 N at head wind, AWS=10 m/s
+        @test wind_resistance(10.0, 0.0, coef) ≈ 0.5*1.225*0.88*121.4*100 atol=1.0
+    end
+
+    @testset "fit_power_speed — recovers P = 3·V³" begin
+        V = collect(5.0:1.0:15.0)
+        P = 3.0 .* V.^3
+        f = fit_power_speed(V, P)
+        @test f.b ≈ 3.0 atol=1e-9
+        @test f.a ≈ 3.0 atol=1e-9
+        @test f.r2 ≈ 1.0 atol=1e-12
+        @test f.predict(10.0) ≈ 3000.0 atol=1e-6
+        @test_throws ArgumentError fit_power_speed([1.0,-1.0], [1.0,2.0])
+    end
+
+    @testset "CDA interpolation — linear & bounded off-grid" begin
+        coef = _COEF
+        # AWA=12.5° is between 0 (0.88) and 30 (0.97): linear interp
+        c = _interp(coef.awa, coef.cda, 12.5)
+        @test c ≈ 0.88 + (12.5/30)*(0.97-0.88) atol=1e-12
+        @test minimum(coef.cda) ≤ c ≤ maximum(coef.cda)
+        # clamps outside the table
+        @test _interp(coef.awa, coef.cda, -10.0) == coef.cda[1]
+        @test _interp(coef.awa, coef.cda, 200.0) == coef.cda[end]
+    end
+
+    @testset "ΔP sign — savings when ON SHP lower, ≈0 when equal" begin
+        mktempdir() do dir
+            # ON segment uses 90% of baseline SHP at matched speed → ΔP>0
+            rc, cf, tr = _write_fixture(dir; on_shp_scale=0.90)
+            r = wap_power_analysis(rc, cf; trim=tr)
+            @test r.ΔP_raw > 0
+            @test r.fit_raw.b ≈ 3.0 atol=0.05           # recovers the base curve
+            @test r.n_on > 0 && r.n_off > 0
+        end
+        mktempdir() do dir
+            # ON == OFF SHP, same wind → ΔP ≈ 0
+            rc, cf, tr = _write_fixture(dir; on_shp_scale=1.0)
+            r = wap_power_analysis(rc, cf; trim=tr)
+            @test abs(r.ΔP_raw) < 1e-6 * r.P_base_raw
+            @test abs(r.ΔP_corr) < 1e-6 * r.P_base_corr
+        end
+    end
+
+    @testset "wind correction — pass-2 > pass-1 when ON saw more head wind" begin
+        mktempdir() do dir
+            # equal measured SHP, but ON sees strong head wind, OFF sees calm.
+            # Raw ΔP≈0; correcting removes the ON head-wind load → ON_corr lower
+            # than baseline_corr → ΔP_corr > ΔP_raw (the device's true saving
+            # was masked by the head wind it had to fight).
+            rc, cf, tr = _write_fixture(dir; on_shp_scale=1.0,
+                                        awa_off=90.0, aws_off=2.0,    # OFF nearly calm/beam
+                                        awa_on=0.0,   aws_on=20.0)    # ON strong head wind
+            r = wap_power_analysis(rc, cf; trim=tr)
+            @test abs(r.ΔP_raw) < 1e-6 * r.P_base_raw     # raw sees no difference
+            @test r.ΔP_corr > r.ΔP_raw                    # correction reveals the saving
+            @test r.seg.on.dP_wind.mean > r.seg.off.dP_wind.mean
+        end
+    end
+
+    @testset "read_trial / read_wind_coef round-trip" begin
+        mktempdir() do dir
+            rc, cf, _ = _write_fixture(dir)
+            tr = read_trial(rc)
+            @test length(tr.shp) == 60 && eltype(tr.shp) == Float64
+            @test tr.on isa BitVector && sum(tr.on) == 20
+            co = read_wind_coef(cf)
+            @test issorted(co.awa) && length(co.cda) == 7
+        end
     end
 
     @testset "thickness: upper/lower straddle camber, vanish at LE/TE" begin

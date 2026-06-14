@@ -37,6 +37,7 @@ export Wing, wing_forces
 export flettner_panel, flettner_analytic
 export phase_transport_1d, default_patch, interface_width
 export als_drag_reduction, als_sweep, als_ship_saving, ittc_cf
+export wap_power_analysis, read_trial, read_wind_coef, wind_resistance, fit_power_speed
 
 # ----------------------------------------------------------------------------
 # The section table
@@ -386,5 +387,6 @@ include("vlm.jl")
 include("flettner.jl")
 include("phase_transport.jl")
 include("als.jl")
+include("wap.jl")
 
 end # module
