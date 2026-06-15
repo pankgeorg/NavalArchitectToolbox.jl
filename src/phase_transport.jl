@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# 1D two-phase advection — the "phase transport equation" (NTUA-8401 Q2β)
+# 1D two-phase advection — the "phase transport equation"
 #
 # The volume fraction α∈[0,1] (1 = water, 0 = air) advected by a uniform
 # velocity u obeys the scalar transport equation
@@ -32,7 +32,7 @@
 """
     default_patch(x) -> α₀
 
-The assignment's initial condition: a water patch `α=1` on `x∈[0.2,0.4]`,
+The reference initial condition: a water patch `α=1` on `x∈[0.2,0.4]`,
 air `α=0` elsewhere. `x` is a vector of cell-centre coordinates.
 """
 default_patch(x::AbstractVector) = [0.2 ≤ xi ≤ 0.4 ? 1.0 : 0.0 for xi in x]
@@ -70,7 +70,7 @@ flux `Cα·u·α(1-α)` is the same term as that solver's per-face
 so the diffusion-vs-sharpening trade-off is directly testable against the
 analytic translate.
 
-Reference test case (assignment Q2β): `N=100, u=1, Co=0.5, t_end=0.2`,
+Reference test case: `N=100, u=1, Co=0.5, t_end=0.2`,
 water patch on `[0.2,0.4]`; at `t=0.2` the analytic profile is the patch
 translated to `[0.4,0.6]`.
 """

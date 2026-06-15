@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Wind-assisted-propulsion (WAP) required-power-change analysis — NTUA-8401 Q5
+# Wind-assisted-propulsion (WAP) required-power-change analysis
 # ITTC 7.5-04-01-02 (Analysis of Speed/Power Trials), reduced for a logged
 # sea-trial dataset that records SHP, speed and apparent wind.
 #
@@ -13,7 +13,7 @@
 # SHP difference is just the superstructure aerodynamic load, not the device.
 # ITTC removes that load with a wind-resistance correction.
 #
-# We produce ΔP in TWO passes (as the assignment asks):
+# We produce ΔP in TWO passes:
 #   Pass 1 (raw):       ΔP from the measured SHP directly — fit P(V) to the
 #                       OFF (baseline) samples, evaluate at the ON segment's
 #                       mean speed, subtract the ON segment's mean SHP.
@@ -69,7 +69,7 @@ const _KN2MS = 0.514444          # knots → m/s
 """
     read_trial(path) -> (; t, sog, stw, rpm, shp, rudder, aws, awa, on)
 
-Read a Θέμα-5 sea-trial CSV (stdlib `DelimitedFiles`). Expected columns:
+Read a sea-trial CSV (stdlib `DelimitedFiles`). Expected columns:
 `DateTime, SOG [kn], STW [kn], Shaft Speed [rpm], SHP [kW], Rudder Angle [deg],
 AWS [kn], AWA [deg], Status_ON`. Speeds (`sog`, `stw`, `aws`) are returned in
 **knots** (as logged); `on` is a `BitVector` (`true` where `Status_ON` is the

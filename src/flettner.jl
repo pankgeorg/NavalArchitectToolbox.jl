@@ -21,7 +21,7 @@
 #     C_L      = ½ ∮ −Cp sinθ dθ  =  Γ/(R V∞)  =  4π ω R²/V∞   (with V∞ chord c=2R)
 #
 # The panel method reproduces these from a discrete no-penetration solve, and
-# is the thing we grid-refine to the assignment's ε(C_L) < 0.02 % tolerance.
+# is the thing we grid-refine to an ε(C_L) < 0.02 % tolerance.
 # At ω=0 it must collapse to the classic non-lifting cylinder Cp = 1 − 4sin²θ.
 #
 # Sign/orientation convention: panels run COUNTER-CLOCKWISE (θ increasing),
@@ -152,7 +152,7 @@ function flettner_panel(; R::Real=0.5, ω::Real=1.0, V∞::Real=1.0, N::Int=200)
         rx = xc[j]; ry = yc[j]; r2 = rx*rx + ry*ry
         # Central point vortex of strength Γ. The CCW panel ordering makes the
         # source-resolved freestream surface-tangential run *opposite* to the
-        # assignment's analytic convention `Vt = 2V∞ sinθ + Γ/(2πR)`; to add
+        # standard analytic convention `Vt = 2V∞ sinθ + Γ/(2πR)`; to add
         # the bound circulation on the same (lift-producing) side as the
         # analytic form, the vortex velocity is taken as Γ/(2π)·(y, −x)/r²
         # (so a positive ω/Γ speeds the flow over the top → +lift, matching
@@ -190,7 +190,7 @@ function flettner_panel(; R::Real=0.5, ω::Real=1.0, V∞::Real=1.0, N::Int=200)
         Cp[j] = 1 - (ut / V∞)^2
     end
 
-    # CL = ½ ∮ −Cp sinθ dθ over chord c = 2R (the assignment's formula).
+    # CL = ½ ∮ −Cp sinθ dθ over chord c = 2R (the standard lift-coefficient definition).
     dθ = 2π / N
     CL = 0.5 * sum(@. -Cp * sin(θc)) * dθ
     return (; θ = θc, Cp, CL, Γ)

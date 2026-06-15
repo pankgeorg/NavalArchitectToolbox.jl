@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Air-lubrication / air-layer drag reduction — reduced 1D model (NTUA-8401 Q2α)
+# Air-lubrication / air-layer drag reduction — reduced 1D model
 #
 # Air lubrication reduces a ship's frictional drag by interposing a thin gas
 # film between the hull and the water. The full physics (bubble breakup, film
