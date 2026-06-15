@@ -19,6 +19,14 @@ function — and it solves the open-water performance itself.
 
 DTMB 4382 (5-blade, 36°-skew DTMB modified series) is baked in (`dtmb4382`).
 
+Around that propeller core, NAT also collects a set of self-contained
+naval-architecture methods, each documented below: a finite-wing
+vortex-lattice solver, a rotating-cylinder (Flettner-rotor) potential-flow
+panel method, a 1-D two-phase volume-fraction advection scheme with
+interface compression, a reduced air-layer drag-reduction model, and a
+sea-trial wind-assist power-analysis tool. Every solver is checked against
+a closed-form, experimental, or theoretical reference (see each section).
+
 ## Open-water VLM — reproduces DTMB 4382
 
 `openwater_vlm` is a from-scratch key-blade vortex-ring lattice method
@@ -130,9 +138,9 @@ r = flettner_panel(; R=0.5, ω=1.0, V∞=1.0, N=160)
 
 **Validation** (R=0.5, V∞=1): at ω=0 the panel collapses exactly to the
 classic non-lifting cylinder `Cp = 1 − 4sin²θ` (max error 1e-14, CL=0).
-Grid refinement drives `ε(C_L)` below the assignment's 0.02 % tolerance at
-**N = 160 panels** (and the error is ω-independent — it lives in the
-geometry discretization, not the circulation):
+Grid refinement drives `ε(C_L)` below 0.02 % at **N = 160 panels** (and the
+error is ω-independent — it lives in the geometry discretization, not the
+circulation):
 
 | N | C_L (ω=1) | ε vs 4πωR² |
 |---:|---:|---:|
@@ -230,15 +238,15 @@ power). It does this in **two passes**:
   segments rarely see the same natural wind — exactly the confound ITTC removes.
 
 ```julia
-coef = read_wind_coef("thema5/added_wind_coef.csv")        # AWA→CDA table
+coef = read_wind_coef("trials/wind_coef.csv")              # AWA→CDA table
 wind_resistance(10.0, 0.0, coef)                            # head wind: +R_AA [N]
 wind_resistance(10.0, 180.0, coef)                          # following: −R_AA
 fit_power_speed(V, 3 .* V.^3).b                             # ≈ 3
 
-r = wap_power_analysis("thema5/RUN_A.csv", "thema5/added_wind_coef.csv";
+r = wap_power_analysis("trials/run_A.csv", "trials/wind_coef.csv";
                        A_T=121.4, ρ_air=1.225, η_D=0.7, trim=4)
 r.ΔP_raw, r.ΔP_corr                                         # raw vs wind-corrected [kW]
-wap_power_analysis(["thema5/RUN_A.csv","thema5/RUN_B.csv"], coef_csv)  # combined
+wap_power_analysis(["trials/run_A.csv","trials/run_B.csv"], coef_csv)  # combined
 ```
 
 **Implemented vs simplified** (stated in the source header): the per-sample
@@ -248,7 +256,7 @@ full; the resistance→power step is simplified to `ΔP_wind = R_AA·V_s/η_D`
 isn't available — `η_D` is an explicit assumption). Added wave resistance,
 density/shallow-water/current corrections are **not** modelled — this is a
 reduced trials-analysis tool, not the full ITTC procedure. A worked demo on
-the Θέμα-5 data is in
+sample sea-trial data is in
 [`../ShipFlow.jl/RESULTS-wap-power.md`](../ShipFlow.jl/RESULTS-wap-power.md).
 
 ## Examples & papers
