@@ -16,6 +16,20 @@ using StaticArrays
         @test all(==(0), t.rake)        # no rake
     end
 
+    @testset "DTMB 4381 = 4382 minus skew" begin
+        a = dtmb4381; b = dtmb4382
+        @test a.Z == 5 && length(a.rR) == 11
+        @test all(==(0), a.skew)                 # 4381 is unskewed
+        @test b.skew[end] == 36.0                # 4382 keeps its skew
+        # everything except the skew column is identical to 4382
+        @test a.rR  == b.rR
+        @test a.cD  == b.cD
+        @test a.PD  == b.PD
+        @test a.tc == b.tc
+        @test a.fc == b.fc
+        @test a.rake == b.rake
+    end
+
     @testset "interpolation + monotone sort" begin
         t = dtmb4382
         @test _interp(t.rR, t.PD, 0.2) == 1.455

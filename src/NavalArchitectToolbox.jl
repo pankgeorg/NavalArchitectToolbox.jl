@@ -29,7 +29,7 @@ using StaticArrays
 # NAT itself stays light (LinearAlgebra + StaticArrays + LiftingSurfaces).
 using LiftingSurfaces: Wing, wing_forces
 
-export PropellerBladeTable, read_blade_table, dtmb4382
+export PropellerBladeTable, read_blade_table, dtmb4382, dtmb4381
 export ParabolicMeanLine, NACAMeanLine, NACA66ish, blade_section_point
 export blade_surface, vlm_camber_grid, pitch_angle, dimensional, blade_sdf
 export openwater_vlm
@@ -107,6 +107,28 @@ r/R     c/D     P/D     tmax/c  fmax/c  θs       XR/R
 0.9000  0.2800  1.0270  0.0239  0.0134  31.5750  0
 0.9500  0.2100  0.9850  0.0229  0.0140  33.7880  0
 1.0000  0.0100  0.9420  0.0160  0.0134  36.000   0
+"""; Z=5)
+
+"""
+DTMB 4381 (5-blade, **0°-skew** parent of the DTMB modified series). 4381,
+4382, 4383, 4384 share *identical* radial chord, pitch, thickness and camber
+distributions; they differ **only** in skew (0°, 36°, 72°, 108° projected at
+the tip). So 4381 is the 4382 table with the skew column `θs` set to zero —
+the unskewed reference for isolating the effect of skew.
+"""
+const dtmb4381 = read_blade_table("""
+r/R     c/D     P/D     tmax/c  fmax/c  θs   XR/R
+0.2000  0.1740  1.4550  0.2494  0.0430  0    0
+0.2500  0.2020  1.4440  0.1960  0.0395  0    0
+0.3000  0.2290  1.4330  0.1562  0.0370  0    0
+0.4000  0.2750  1.4120  0.1068  0.0344  0    0
+0.5000  0.3120  1.3610  0.0768  0.0305  0    0
+0.6000  0.3370  1.2850  0.0566  0.0247  0    0
+0.7000  0.3470  1.2000  0.0421  0.0199  0    0
+0.8000  0.3340  1.1120  0.0314  0.0161  0    0
+0.9000  0.2800  1.0270  0.0239  0.0134  0    0
+0.9500  0.2100  0.9850  0.0229  0.0140  0    0
+1.0000  0.0100  0.9420  0.0160  0.0134  0    0
 """; Z=5)
 
 # ----------------------------------------------------------------------------
