@@ -158,6 +158,34 @@ using StaticArrays
         @test isfinite(r.CDi)
     end
 
+    @testset "liftingline_vlm — Weissinger horseshoe VLM" begin
+        # symmetric flat rectangular wing (AR=6): no lift at α=0
+        r0 = liftingline_vlm(; chord_root=1.0, chord_tip=1.0, span=6.0, alpha=0.0, N=120)
+        @test abs(r0.CL) < 1e-6
+        # lift slope sits just below the lifting-line value 2π·AR/(AR+2)
+        r5 = liftingline_vlm(; chord_root=1.0, chord_tip=1.0, span=6.0, alpha=5.0, N=120)
+        AR = r5.AR; @test 6.0 < AR < 6.4                   # ≈6, slightly raised by the 2% tip inset
+        slope = r5.CL / deg2rad(5.0)                       # per rad (CL(0)=0)
+        ll = 2π*AR/(AR+2)
+        @test 0.80*ll < slope < 1.0*ll
+        # physically-consistent span efficiency (leading-edge suction recovered)
+        @test 0.85 < r5.e < 1.02
+        # induced drag scales ~ CL²
+        r10 = liftingline_vlm(; chord_root=1.0, chord_tip=1.0, span=6.0, alpha=10.0, N=120)
+        @test isapprox(r10.CDi/r5.CDi, (r10.CL/r5.CL)^2; rtol=0.05)
+        # agrees with the multi-chordwise Wing CL within a few %
+        rw = wing_forces(Wing(; chord_root=1.0, chord_tip=1.0, span=6.0, ns=40, nc=8), deg2rad(5.0), 1.0)
+        @test isapprox(r5.CL, rw.CL; rtol=0.08)
+        # tapered wing with washout: +2°(root)/−2°(tip) → small positive lift at α=0
+        rt = liftingline_vlm(; chord_root=6.0, chord_tip=3.5, span=17.0, alpha=0.0,
+                             twist_root=2.0, twist_tip=-2.0, N=80)
+        @test 0 < rt.CL < 0.1
+        # circulation peaks at mid-span, loading falls to ~0 at the tips
+        rL = liftingline_vlm(; chord_root=6.0, chord_tip=3.5, span=17.0, alpha=10.0, N=80)
+        @test argmax(rL.Γ) in (40, 41)                     # Γ peaks at mid (80 strips)
+        @test rL.cl_span[1] < 0.5*maximum(rL.cl_span)      # low loading at the tip
+    end
+
     @testset "phase_transport_1d — upwind bounded & conservative" begin
         r = phase_transport_1d(; N=100, u=1.0, Co=0.5, t_end=0.2)
         @test length(r.x) == 100
