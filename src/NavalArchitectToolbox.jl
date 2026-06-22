@@ -19,6 +19,7 @@ module NavalArchitectToolbox
 # (Anevlavi-Belibassakis, JMSE 2023); see the package README.
 
 using StaticArrays
+using LinearAlgebra
 
 # The unified "naval tools" surface. NAT re-exports the finite-wing VLM from
 # LiftingSurfaces.jl so `using NavalArchitectToolbox` brings up, in one place:
@@ -34,6 +35,7 @@ export ParabolicMeanLine, NACAMeanLine, NACA66ish, blade_section_point
 export blade_surface, vlm_camber_grid, pitch_angle, dimensional, blade_sdf
 export openwater_vlm
 export Wing, wing_forces
+export liftingline_vlm
 export flettner_panel, flettner_analytic
 export phase_transport_1d, default_patch, interface_width
 export als_drag_reduction, als_sweep, als_ship_saving, ittc_cf
@@ -406,6 +408,7 @@ function blade_sdf(tab::PropellerBladeTable{T}, D, Dh;
 end
 
 include("vlm.jl")
+include("liftingline_vlm.jl")
 include("flettner.jl")
 include("phase_transport.jl")
 include("als.jl")

@@ -100,6 +100,9 @@ r = openwater_vlm(t, 6.0, 1.2, 0.889)          # (; KT, KQ, η, Γ, cp, dcp, for
   Magnus circulation, validated against the closed form to ε < 0.02 %.
 - **`Wing` / `wing_forces`** — finite-wing VLM, re-exported from
   LiftingSurfaces.jl (the unified toolbox surface).
+- **`liftingline_vlm`** — pure-Julia Weissinger horseshoe-vortex lifting-line
+  for a symmetric finite wing (the lightweight, dependency-free counterpart of
+  `Wing`); spanwise loading, lift slope and near-field induced drag.
 
 ## The unified "naval tools" surface
 
@@ -121,6 +124,34 @@ Plus two pure-Julia two-phase-flow / drag-reduction mini-tools:
 
 The *viscous* Flettner run (WaterLily) lives in ShipFlow.jl, which has the
 WaterLily dependency — NAT itself never takes a WaterLily dep.
+
+## Finite-wing lifting-line VLM — `liftingline_vlm`
+
+A pure-Julia **Weissinger horseshoe lattice** (one chordwise panel per
+spanwise strip: bound vortex on the 1/4-chord line, control point at the
+3/4-chord, streamwise semi-infinite trailing legs, near-field Kutta–Joukowski
+forces). It is the lightweight, dependency-free sibling of `Wing` (which runs a
+multi-chordwise VLM over VortexLattice.jl): no chordwise pressure distribution,
+but the spanwise loading, lift slope and induced drag of a symmetric finite
+wing in `LinearAlgebra + StaticArrays` only.
+
+```julia
+r = liftingline_vlm(; chord_root=6.0, chord_tip=3.5, span=17.0, alpha=10.0,
+                      sweep=0.0, twist_root=0.0, twist_tip=0.0, N=100)
+@show r.CL r.CDi r.e r.AR            # CL≈0.58, e≈0.92 (Trefftz-consistent)
+```
+
+`chord_root` is the mid-span (root) chord, tapering linearly to `chord_tip` at
+*both* tips; `sweep` is the leading-edge angle, twist is linear from root to
+tip, all in degrees. Returns `(; CL, CDi, e, S, AR, Γ, y, cl_span)`.
+
+**Validation.** The lift slope sits just below the lifting-line value
+`dCL/dα = 2π·AR/(AR+2)` (~0.87× for AR≈6), the implied span efficiency is
+`e≈0.9–1.0` (the near-field force recovers the leading-edge suction, so the
+induced drag matches the Trefftz plane), and `CL` agrees with the
+multi-chordwise `Wing` within ~1–2 % across the AoA range. The spanwise
+circulation peaks at mid-span and the sectional `cl` shifts outboard on a
+tapered planform (the usual tip-stall tendency).
 
 ## Flettner rotor — 2D rotating-cylinder potential flow
 
